@@ -42,13 +42,10 @@ fun ShowImages(modifier: Modifier = Modifier){
 
     //Get the ids of all images
     val imageIds = listOf(
-        R.drawable.__30,
         R.drawable.rome,
         R.drawable.ansel,
         R.drawable.kauai,
         R.drawable.despair,
-        R.drawable._k_wallpaper_adventure_clouds_730981,
-        R.drawable._k_wallpaper_cloudiness_clouds_1536809,
         R.drawable.adventure_beautiful_daylight_325807,
         R.drawable.agriculture_color_cooking_255501,
         R.drawable.ancient_architecture_birds_819806,
@@ -75,7 +72,7 @@ fun ShowImages(modifier: Modifier = Modifier){
 
     Column(modifier = Modifier.fillMaxSize()){
         LazyVerticalGrid(
-            GridCells.Fixed(3),
+            GridCells.Fixed(2),
             contentPadding = PaddingValues(8.dp),
             modifier = Modifier.fillMaxSize()
         ){
