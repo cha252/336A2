@@ -3,44 +3,35 @@ package com.example.hada_a2
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.hada_a2.ui.theme.Hada_A2Theme
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.internal.throwMissingFieldException
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            Hada_A2Theme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    ShowImages(
-                        modifier = Modifier.padding(innerPadding)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ShowImages(modifier: Modifier = Modifier){
-
-    //Get the ids of all images
+    //List of images' ids
     val imageIds = listOf(
         R.drawable.rome,
         R.drawable.ansel,
@@ -70,28 +61,82 @@ fun ShowImages(modifier: Modifier = Modifier){
         R.drawable.yosemite_tree
     )
 
-    Column(modifier = Modifier.fillMaxSize()){
+    @Composable
+    //Lazy vertical grid to display the images
+    fun CameraRoll(modifier: Modifier = Modifier) {
+        val context = LocalContext.current
+
+        //Lazy vertical grid to display images
         LazyVerticalGrid(
-            GridCells.Fixed(2),
+            columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(8.dp),
-            modifier = Modifier.fillMaxSize()
-        ){
-            items(imageIds.size){ index ->
-                val image = painterResource(imageIds[index])
+            modifier = modifier.fillMaxSize()
+        ) {
+            items(imageIds.size) { index ->
+                ThumbnailImage(imageIds[index])
+            }
+        }
+    }
+
+    @Composable
+    //Thumbnail function to get a thumbnail of each image
+    fun ThumbnailImage(imageId: Int) {
+        //Declare variables
+        val context = LocalContext.current
+        var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        //Use a coroutine to get the thumbnail
+        LaunchedEffect(imageId) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val original = BitmapFactory.decodeResource(context.resources, imageId)
+                    val thumbnail = Bitmap.createScaledBitmap(original, 400, 400, true)
+                    bitmap = thumbnail
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        //Return a box containing the thumbnail
+        Box(
+            modifier = Modifier
+                .padding(2.dp)
+                .aspectRatio(1f)
+                .fillMaxWidth()
+                .background(Color.LightGray)
+        ) {
+            bitmap?.let {
                 Image(
-                    painter = image,
+                    bitmap = it.asImageBitmap(),
                     contentDescription = null,
-                    modifier = Modifier.padding(8.dp)
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxHeight()
                 )
             }
         }
     }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun ImagePreview() {
-    Hada_A2Theme {
-        ShowImages()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            Hada_A2Theme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    CameraRoll(
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+            }
+        }
+    }
+
+    @Preview(showBackground = true, showSystemUi = true)
+    @Composable
+    fun CameraRollPreview() {
+        Hada_A2Theme {
+            CameraRoll()
+        }
     }
 }
