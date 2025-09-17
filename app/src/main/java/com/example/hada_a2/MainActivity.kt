@@ -29,10 +29,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.collection.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.Spring.DampingRatioLowBouncy
+import androidx.compose.animation.core.Spring.StiffnessVeryLow
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
@@ -41,13 +48,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
+import java.lang.Integer.max
+import kotlin.math.min
+import kotlin.math.roundToInt
 class MainActivity : ComponentActivity() {
     //Declare variables
     private var hasPermission by mutableStateOf(false)
@@ -135,20 +148,62 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         var imageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
+        //Scale to define how zoomed in the photos should be
+        var scaleState by remember { mutableStateOf(1f) }
+        var columns by remember { mutableStateOf(2) }
+
+        //Use animateFloatAsState to animate the scale
+        val scale by animateFloatAsState(
+            targetValue = scaleState,
+            animationSpec = spring(dampingRatio = DampingRatioLowBouncy, stiffness = StiffnessVeryLow)
+        )
+
         //Check for permission
         LaunchedEffect(hasPermission) { if(hasPermission) { imageUris = getImages(context) } }
 
         //If the app has the required permission
         if(hasPermission) {
-            //Set the lazy vertical grid
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                contentPadding = PaddingValues(8.dp),
-                modifier = modifier.fillMaxSize()
-            ) {
-                //Set each item of the grid as a thumbnail
-                items(imageUris.size) { index ->
-                    ThumbnailImage(imageUris[index])
+
+            //Put the lazy vertical grid in a box
+            Box(
+                //Pinch to zoom copied from MatchingGridViewModel example
+                Modifier.pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(pass = PointerEventPass.Initial)
+                        do {
+                            val event = awaitPointerEvent(pass = PointerEventPass.Initial)
+                            val zoomChange = event.calculateZoom()
+                            if (zoomChange != 1f) {
+                                scaleState *= zoomChange
+                                if(scale!=0f) {
+                                    val cols =
+                                        min(max((columns / scale).roundToInt(), 1), 6)
+                                    if (cols != columns) {
+                                        columns = cols
+                                    }
+                                }
+                                event.changes.forEach { it.consume() }
+                            }
+                        } while (event.changes.any { it.pressed })
+                        scaleState = 1f
+                    }
+                }
+            ){
+                //Set the lazy vertical grid
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    contentPadding = PaddingValues(10.dp),
+                    modifier = modifier
+                        .fillMaxSize()
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale
+                        )
+                ) {
+                    //Set each item of the grid as a thumbnail
+                    items(imageUris.size) { index ->
+                        ThumbnailImage(imageUris[index])
+                    }
                 }
             }
         }
