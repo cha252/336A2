@@ -22,12 +22,18 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
+import android.os.Debug
 import android.provider.MediaStore
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.collection.LruCache
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +41,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
@@ -97,6 +105,27 @@ class MainActivity : ComponentActivity() {
         return uris
     }
 
+    //Calculate in sample image size copied from https://developer.android.com/topic/performance/graphics/load-bitmap#kotlin
+    fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.run { outHeight to outWidth }
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    //Function to open a photo when clicked
+    fun openPhoto(uri: Uri){
+
+    }
+
     //Lazy vertical grid to display the images
     @Composable
     fun CameraRoll(modifier: Modifier = Modifier) {
@@ -129,8 +158,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-
     @Composable
     //Thumbnail function to get a thumbnail of each image
     fun ThumbnailImage(uri: Uri) {
@@ -139,24 +166,38 @@ class MainActivity : ComponentActivity() {
         var bitmap by remember { mutableStateOf<Bitmap?>(null) }
 
         LaunchedEffect(uri) {
-            //Use the uri string as the key
+            //Get the uri as a string and whether the image has been cached or not
             val key = uri.toString()
+            val cached = (context as MainActivity).memoryCache[key]
 
-            //Check if in cache first
-            val cached = (context as MainActivity).memoryCache.get(key)
-            //If the image has already been cached
-            if(cached != null){
-                //Set bitmap to the cached image
+            //If image has already been cached
+            if (cached != null) {
+                //Set the bitmap to the cached value
                 bitmap = cached
-            }
-            else {
-                //Use a coroutine to get the thumbnail
-                withContext(Dispatchers.IO) {
+            } else {
+                //If the image has not been cached, use a coroutine to get the thumbnail
+                CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        context.contentResolver.openInputStream(uri)?.use{stream ->
-                            val original = BitmapFactory.decodeStream(stream)
-                            val thumbnail = Bitmap.createScaledBitmap(original, 400, 400, true)
-                            bitmap = thumbnail
+                        //Decode with inJustDecodeBounds=true to check dimensions
+                        val options = BitmapFactory.Options().apply {
+                            inJustDecodeBounds = true
+                        }
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            BitmapFactory.decodeStream(stream, null, options)
+                        }
+
+                        //Calculate the inSampleSize
+                        options.inSampleSize = calculateInSampleSize(options, 200, 200)
+
+                        //Decode bitmap with inSampleSize set
+                        options.inJustDecodeBounds = false
+                        val decoded = context.contentResolver.openInputStream(uri)?.use { stream ->
+                            BitmapFactory.decodeStream(stream, null, options)
+                        }
+
+                        decoded?.let {
+                            bitmap = it
+                            context.memoryCache.put(key, it)
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -165,13 +206,13 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        //Return a box containing the thumbnail
         Box(
             modifier = Modifier
                 .padding(2.dp)
                 .aspectRatio(1f)
                 .fillMaxWidth()
                 .background(Color.LightGray)
+                .clickable { (context as MainActivity).openPhoto(uri) }
         ) {
             bitmap?.let {
                 Image(
@@ -183,7 +224,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
