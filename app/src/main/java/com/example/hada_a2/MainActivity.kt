@@ -27,6 +27,7 @@ import android.provider.MediaStore
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.collection.LruCache
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
@@ -39,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
@@ -206,21 +208,28 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        Box(
+        //Use animated visibility to add animation when photo comes onto screen
+        AnimatedVisibility(
+            visible = bitmap != null,
+            enter = scaleIn()
+        ) {
+            //Make the thumbnail a clickable box
+            Box(
             modifier = Modifier
                 .padding(2.dp)
                 .aspectRatio(1f)
                 .fillMaxWidth()
                 .background(Color.LightGray)
                 .clickable { (context as MainActivity).openPhoto(uri) }
-        ) {
-            bitmap?.let {
-                Image(
-                    bitmap = it.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxHeight()
-                )
+            ) {
+                bitmap?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxHeight()
+                    )
+                }
             }
         }
     }
@@ -259,3 +268,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+//Need to add pinch to zoom
+//Need to add click photo to view
+//Need to add appbar at top
+//Need to fix thumbnails' orientation
