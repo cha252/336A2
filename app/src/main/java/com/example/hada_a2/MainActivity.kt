@@ -21,15 +21,15 @@ import androidx.compose.ui.unit.dp
 import com.example.hada_a2.ui.theme.Hada_A2Theme
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.os.Build
-import android.os.Debug
 import android.provider.MediaStore
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.collection.LruCache
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Spring.DampingRatioLowBouncy
 import androidx.compose.animation.core.Spring.StiffnessVeryLow
 import androidx.compose.animation.core.animateFloatAsState
@@ -40,14 +40,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -65,12 +60,11 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
-
-import java.lang.Integer.max
 import kotlin.math.min
-import kotlin.math.roundToInt
+import kotlin.math.max
+import androidx.core.graphics.scale
+
 class MainActivity : ComponentActivity() {
     //Declare variables
     private var hasPermission by mutableStateOf(false)
@@ -225,6 +219,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
     @Composable
     //Thumbnail function to get a thumbnail of each image
     fun ThumbnailImage(uri: Uri) {
@@ -254,7 +249,7 @@ class MainActivity : ComponentActivity() {
                         }
 
                         //Calculate the inSampleSize
-                        options.inSampleSize = calculateInSampleSize(options, 200, 200)
+                        options.inSampleSize = calculateInSampleSize(options, 400, 400)
 
                         //Decode bitmap with inSampleSize set
                         options.inJustDecodeBounds = false
@@ -262,7 +257,23 @@ class MainActivity : ComponentActivity() {
                             BitmapFactory.decodeStream(stream, null, options)
                         }
 
-                        decoded?.let {
+                        //Get orientation of the bitmap
+                        val exif = ExifInterface(context.contentResolver.openInputStream(uri)!!)
+                        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+
+                        //Rotate thumbnail's orientation if wrong
+                        val rotMatrix = Matrix()
+                        when (orientation) {
+                            ExifInterface.ORIENTATION_ROTATE_90 -> { rotMatrix.postRotate(90f) }
+                            ExifInterface.ORIENTATION_ROTATE_180 -> { rotMatrix.postRotate(180f) }
+                            ExifInterface.ORIENTATION_ROTATE_270 -> { rotMatrix.postRotate(270f) }
+                        }
+
+                        //Rotate bitmap
+                        val rotatedBitmap = Bitmap.createBitmap(decoded!!, 0, 0,decoded.width, decoded.height, rotMatrix, true)
+
+                        //Add the decoded bitmap to the cache
+                        rotatedBitmap.let {
                             bitmap = it
                             context.memoryCache.put(key, it)
                         }
