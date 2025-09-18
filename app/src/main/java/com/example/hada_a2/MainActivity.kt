@@ -1,6 +1,7 @@
 package com.example.hada_a2
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -41,8 +42,17 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -117,6 +127,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        //Return list of images' uris
         return uris
     }
 
@@ -163,7 +174,6 @@ class MainActivity : ComponentActivity() {
 
         //If the app has the required permission
         if(hasPermission) {
-
             //Put the lazy vertical grid in a box
             Box(
                 //Pinch to zoom copied from MatchingGridViewModel example
@@ -289,24 +299,51 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    //App bar composable based on MatchGridViewModel example
+    fun AppBar(){
+        //Get context for refreshing
+        val context = LocalContext.current
+
+        TopAppBar(
+            title = { Text("Gallery") },
+            actions = {
+                IconButton(onClick = {
+                    init()
+                }) {
+                    Icon(Icons.Filled.Refresh, null)
+                }
+            }
+        )
+    }
+
+    fun init(){
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
 
         //Set up cache size
         val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
         val cacheSize = maxMemory / 8
-        memoryCache = object: LruCache<String, Bitmap>(cacheSize){
+        memoryCache = object: LruCache<String, Bitmap>(cacheSize) {
             override fun sizeOf(key: String, value: Bitmap): Int {
                 return value.byteCount / 1024
             }
         }
+
         //Check for the permission and get if required
         checkAndRequestPermission()
 
         enableEdgeToEdge()
         setContent {
             Hada_A2Theme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.fillMaxSize(),
+                    topBar = { AppBar() }
+                ) { innerPadding ->
                     CameraRoll(
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -315,15 +352,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
     @Preview(showBackground = true, showSystemUi = true)
     @Composable
     fun CameraRollPreview() {
         Hada_A2Theme {
-            CameraRoll()
+            Scaffold(
+                topBar = { AppBar() },
+            ) {
+                CameraRoll()
+            }
         }
     }
 }
-//Need to add pinch to zoom
 //Need to add click photo to view
-//Need to add appbar at top
 //Need to fix thumbnails' orientation
+//Need to make refresh button functional
