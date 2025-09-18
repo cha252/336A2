@@ -6,7 +6,6 @@ package com.example.hada_a2
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -25,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import com.example.hada_a2.ui.theme.Hada_A2Theme
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -45,6 +43,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -62,7 +62,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -173,6 +172,11 @@ class MainActivity : ComponentActivity() {
         val context = LocalContext.current
         var bitmap by remember { mutableStateOf<Bitmap?>(null) }
 
+        //Values for zooming and navigating the image
+        var scale by remember { mutableFloatStateOf(1f) }
+        var offsetX by remember { mutableFloatStateOf(0f) }
+        var offsetY by remember { mutableFloatStateOf(0f) }
+
         //Get the selected photo
         LaunchedEffect(uri) {
             CoroutineScope(Dispatchers.IO).launch {
@@ -187,16 +191,29 @@ class MainActivity : ComponentActivity() {
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ){ bitmap?.let{
+                //Update the zoom and offset of the image
+                val state = rememberTransformableState { zoomChange, offsetChange, rotationChange ->
+                    scale *= zoomChange
+                    offsetX += (offsetChange.x * scale)
+                    offsetY += (offsetChange.y * scale)
+                }
                 Image(
                     bitmap = it.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offsetX
+                            translationY = offsetY
+                        }
+                        .transformable(state)
                 )
             }
         }
     }
-
 
     //Lazy vertical grid to display the images
     @Composable
@@ -373,11 +390,14 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun AppUI(modifier: Modifier = Modifier){
+        //Navigation controller and host to navigate between the gallery and individual images
         val navController = rememberNavController()
         NavHost(navController = navController, startDestination = "CameraRoll", builder = {
+            //Define the camera roll composable
             composable("CameraRoll"){
                CameraRoll(modifier, navController)
             }
+            //Define the composable for each image
             composable("SinglePhoto"+"/{uri}") {
                 val uriString = it.arguments?.getString("uri")
                 val uri = Uri.parse(Uri.decode(uriString))
@@ -440,5 +460,4 @@ class MainActivity : ComponentActivity() {
     }
 }
 //Need to add swipe to go back once in image
-//Need to add zoom in/out on photo feature
 //Need to make refresh button functional
