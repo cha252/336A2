@@ -1,8 +1,12 @@
+//Chisora Hada
+//23001770
+
 package com.example.hada_a2
 
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.example.hada_a2.ui.theme.Hada_A2Theme
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
@@ -57,13 +62,17 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlin.math.min
 import kotlin.math.max
-import androidx.core.graphics.scale
 
 class MainActivity : ComponentActivity() {
     //Declare variables
@@ -80,38 +89,36 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-            }
-            else{
+            } else {
                 hasPermission = true
             }
         } else {
             if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
-            else{
+            } else {
                 hasPermission = true
             }
         }
     }
 
     //Function to get images from device memory
-    fun getImages(context: Context): List<Uri>{
+    fun getImages(context: Context): List<Uri> {
         //Declare variables
         val uris = mutableListOf<Uri>()
         val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        val projectionn = arrayOf(MediaStore.Images.Media._ID)
+        val projection = arrayOf(MediaStore.Images.Media._ID)
 
         //Add all images to uris in date order (newest first)
         context.contentResolver.query(
             collection,
-            projectionn,
+            projection,
             null,
             null,
             "${MediaStore.Images.Media.DATE_ADDED} DESC"
-        )?.use{ cursor ->
+        )?.use { cursor ->
             val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
 
-            while(cursor.moveToNext()){
+            while (cursor.moveToNext()) {
                 val id = cursor.getLong(idColumn)
                 val contentUri = Uri.withAppendedPath(
                     MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
@@ -141,21 +148,66 @@ class MainActivity : ComponentActivity() {
         return inSampleSize
     }
 
-    //Function to open a photo when clicked
-    fun openPhoto(uri: Uri){
+    //Function to fix the rotation of an image
+    fun fixRotation(context: Context, uri: Uri, decoded: Bitmap?): Bitmap? {
+        //Get orientation of the bitmap
+        val exif = ExifInterface(context.contentResolver.openInputStream(uri)!!)
+        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
 
+        //Rotate image's orientation if wrong
+        val rotMatrix = Matrix()
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> { rotMatrix.postRotate(90f) }
+            ExifInterface.ORIENTATION_ROTATE_180 -> { rotMatrix.postRotate(180f) }
+            ExifInterface.ORIENTATION_ROTATE_270 -> { rotMatrix.postRotate(270f) }
+        }
+
+        //Rotate bitmap
+        return Bitmap.createBitmap(decoded!!, 0, 0, decoded.width, decoded.height, rotMatrix, true)
     }
+
+    //Composable to display the selected photo
+    @Composable
+    fun SinglePhoto(uri: Uri){
+        //Get context and declare a bitmap for the photo
+        val context = LocalContext.current
+        var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        //Get the selected photo
+        LaunchedEffect(uri) {
+            CoroutineScope(Dispatchers.IO).launch {
+                val stream = context.contentResolver.openInputStream(uri)
+                bitmap = BitmapFactory.decodeStream(stream)
+                //Fix rotation of image
+                bitmap = fixRotation(context, uri, bitmap)
+            }
+        }
+        //Display the image in a box
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ){ bitmap?.let{
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+    }
+
 
     //Lazy vertical grid to display the images
     @Composable
-    fun CameraRoll(modifier: Modifier = Modifier) {
+    fun CameraRoll(modifier: Modifier = Modifier, navController: NavController) {
         //Declare variables
         val context = LocalContext.current
         var imageUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
 
         //Scale to define how zoomed in the photos should be
-        var scaleState by remember { mutableStateOf(1f) }
-        var columns by remember { mutableStateOf(2) }
+        var scaleState by remember { mutableFloatStateOf(1f) }
+        var columns by remember { mutableIntStateOf(2) }
 
         //Use animateFloatAsState to animate the scale
         val scale by animateFloatAsState(
@@ -206,7 +258,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     //Set each item of the grid as a thumbnail
                     items(imageUris.size) { index ->
-                        ThumbnailImage(imageUris[index])
+                        ThumbnailImage(imageUris[index], navController)
                     }
                 }
             }
@@ -222,7 +274,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     //Thumbnail function to get a thumbnail of each image
-    fun ThumbnailImage(uri: Uri) {
+    fun ThumbnailImage(uri: Uri, navController: NavController) {
         //Declare variables
         val context = LocalContext.current
         var bitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -241,9 +293,7 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
                         //Decode with inJustDecodeBounds=true to check dimensions
-                        val options = BitmapFactory.Options().apply {
-                            inJustDecodeBounds = true
-                        }
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                         context.contentResolver.openInputStream(uri)?.use { stream ->
                             BitmapFactory.decodeStream(stream, null, options)
                         }
@@ -257,23 +307,11 @@ class MainActivity : ComponentActivity() {
                             BitmapFactory.decodeStream(stream, null, options)
                         }
 
-                        //Get orientation of the bitmap
-                        val exif = ExifInterface(context.contentResolver.openInputStream(uri)!!)
-                        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-
-                        //Rotate thumbnail's orientation if wrong
-                        val rotMatrix = Matrix()
-                        when (orientation) {
-                            ExifInterface.ORIENTATION_ROTATE_90 -> { rotMatrix.postRotate(90f) }
-                            ExifInterface.ORIENTATION_ROTATE_180 -> { rotMatrix.postRotate(180f) }
-                            ExifInterface.ORIENTATION_ROTATE_270 -> { rotMatrix.postRotate(270f) }
-                        }
-
-                        //Rotate bitmap
-                        val rotatedBitmap = Bitmap.createBitmap(decoded!!, 0, 0,decoded.width, decoded.height, rotMatrix, true)
+                        //Fix orientation
+                        val rotatedBitmap = fixRotation(context, uri, decoded)
 
                         //Add the decoded bitmap to the cache
-                        rotatedBitmap.let {
+                        rotatedBitmap?.let {
                             bitmap = it
                             context.memoryCache.put(key, it)
                         }
@@ -289,6 +327,9 @@ class MainActivity : ComponentActivity() {
             visible = bitmap != null,
             enter = scaleIn()
         ) {
+            //Uri as a string to pass to the nav controller
+            val uriString = Uri.encode(uri.toString())
+
             //Make the thumbnail a clickable box
             Box(
             modifier = Modifier
@@ -296,7 +337,7 @@ class MainActivity : ComponentActivity() {
                 .aspectRatio(1f)
                 .fillMaxWidth()
                 .background(Color.LightGray)
-                .clickable { (context as MainActivity).openPhoto(uri) }
+                .clickable { navController.navigate("SinglePhoto/$uriString") }
             ) {
                 bitmap?.let {
                     Image(
@@ -314,14 +355,11 @@ class MainActivity : ComponentActivity() {
     @Composable
     //App bar composable based on MatchGridViewModel example
     fun AppBar(){
-        //Get context for refreshing
-        val context = LocalContext.current
-
         TopAppBar(
             title = { Text("Gallery") },
             actions = {
                 IconButton(onClick = {
-                    init()
+//                    do something here
                 }) {
                     Icon(Icons.Filled.Refresh, null)
                 }
@@ -329,12 +367,27 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    fun init(){
+    @Composable
+    fun Init(){
+    }
+
+    @Composable
+    fun AppUI(modifier: Modifier = Modifier){
+        val navController = rememberNavController()
+        NavHost(navController = navController, startDestination = "CameraRoll", builder = {
+            composable("CameraRoll"){
+               CameraRoll(modifier, navController)
+            }
+            composable("SinglePhoto"+"/{uri}") {
+                val uriString = it.arguments?.getString("uri")
+                val uri = Uri.parse(Uri.decode(uriString))
+                SinglePhoto(uri)
+            }
+        })
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
 
         //Set up cache size
         val maxMemory = (Runtime.getRuntime().maxMemory() / 1024).toInt()
@@ -348,6 +401,7 @@ class MainActivity : ComponentActivity() {
         //Check for the permission and get if required
         checkAndRequestPermission()
 
+        //Set content of app
         enableEdgeToEdge()
         setContent {
             Hada_A2Theme {
@@ -355,9 +409,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     topBar = { AppBar() }
                 ) { innerPadding ->
-                    CameraRoll(
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    AppUI(Modifier.padding(innerPadding))
                 }
             }
         }
@@ -371,11 +423,22 @@ class MainActivity : ComponentActivity() {
             Scaffold(
                 topBar = { AppBar() },
             ) {
-                CameraRoll()
+                val modifier = Modifier.padding(it)
+                val navController = rememberNavController()
+                NavHost(navController = navController, startDestination = "CameraRoll", builder = {
+                    composable("CameraRoll"){
+                        CameraRoll(modifier, navController)
+                    }
+                    composable("SinglePhoto"+"/{uri}") {
+                        val uri = Uri.parse(it.arguments?.getString("uri"))
+                        SinglePhoto(uri)
+                    }
+                })
+                CameraRoll(navController = navController)
             }
         }
     }
 }
-//Need to add click photo to view
-//Need to fix thumbnails' orientation
+//Need to add swipe to go back once in image
+//Need to add zoom in/out on photo feature
 //Need to make refresh button functional
