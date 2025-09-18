@@ -176,6 +176,8 @@ class MainActivity : ComponentActivity() {
         var scale by remember { mutableFloatStateOf(1f) }
         var offsetX by remember { mutableFloatStateOf(0f) }
         var offsetY by remember { mutableFloatStateOf(0f) }
+        var width by remember { mutableStateOf(0) }
+        var height by remember { mutableStateOf(0) }
 
         //Get the selected photo
         LaunchedEffect(uri) {
@@ -184,18 +186,30 @@ class MainActivity : ComponentActivity() {
                 bitmap = BitmapFactory.decodeStream(stream)
                 //Fix rotation of image
                 bitmap = fixRotation(context, uri, bitmap)
+                //Get image dimensions
+                width = bitmap!!.width
+                height = bitmap!!.height
             }
         }
         //Display the image in a box
         Box(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.size(width.dp, height.dp),
             contentAlignment = Alignment.Center
-        ){ bitmap?.let{
-                //Update the zoom and offset of the image
+        ){
+            bitmap?.let{
+                //Update the zoom and offset of the image (calculations based on https://www.youtube.com/watch?v=3CjOyoqi_PQ)
                 val state = rememberTransformableState { zoomChange, offsetChange, rotationChange ->
-                    scale *= zoomChange
-                    offsetX += (offsetChange.x * scale)
-                    offsetY += (offsetChange.y * scale)
+                    scale = (scale * zoomChange).coerceIn(1f, 10f)
+
+                    val extraWidth = (scale - 1) * width
+                    val extraHeight = (scale - 1) * height
+
+                    val maxX = extraWidth / 2
+                    val maxY = extraHeight / 2
+
+                    offsetX = (offsetX + offsetChange.x).coerceIn(-maxX, maxX)
+                    offsetY = (offsetY + offsetChange.y).coerceIn(-maxY, maxY)
+
                 }
                 Image(
                     bitmap = it.asImageBitmap(),
